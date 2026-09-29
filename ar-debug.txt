@@ -1,0 +1,392 @@
+# ==================================================
+ARTrainingScreen.tsx
+
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { ViroARSceneNavigator } from '@reactvision/react-viro';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Card } from '../../components/Card';
+import { Button } from '../../components/Button';
+import { getARSession } from './arService';
+import { ARSurfaceScene } from './ARSurfaceScene';
+import { TraineeStackParamList } from '../../navigation/types';
+import { theme } from '../../theme/theme';
+
+type Props = NativeStackScreenProps<TraineeStackParamList, 'ARTraining'>;
+
+export const ARTrainingScreen = ({ navigation, route }: Props) => {
+  const [objectPlaced, setObjectPlaced] = React.useState(false);
+  const session = getARSession(route.params.sessionId);
+
+  if (!session) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.title}>AR session unavailable</Text>
+        <Text style={styles.subtitle}>Start the scenario again to create a new training session.</Text>
+        <Button title="Back to Training" onPress={() => navigation.popToTop()} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.arContainer}>
+      <ViroARSceneNavigator
+        autofocus
+        initialScene={{
+          scene: () => <ARSurfaceScene onObjectTapped={() => setObjectPlaced(true)} />,
+        }}
+        style={styles.arView}
+      />
+      <View style={styles.overlay} pointerEvents="box-none">
+        <View style={styles.overlayHeader}>
+          <Text style={styles.eyebrow}>AR TRAINING SESSION</Text>
+          <Text style={styles.overlayTitle}>{session.scenario.trainingModule}</Text>
+          <Text style={styles.overlaySubtitle}>Tap a detected surface to place the extinguisher.</Text>
+        </View>
+        {objectPlaced ? (
+          <Button
+            title="Continue to AR Assessment"
+            onPress={() => navigation.navigate('ARAssessment', { sessionId: session.id })}
+          />
+        ) : null}
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.background,
+    justifyContent: 'center',
+  },
+  arContainer: {
+    flex: 1,
+    backgroundColor: theme.colors.primary,
+  },
+  arView: {
+    flex: 1,
+  },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'space-between',
+    padding: theme.spacing.lg,
+  },
+  overlayHeader: {
+    backgroundColor: 'rgba(15, 23, 42, 0.82)',
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    marginTop: theme.spacing.lg,
+  },
+  overlayTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.card,
+  },
+  overlaySubtitle: {
+    ...theme.typography.body,
+    color: '#FFFFFFCC',
+    marginTop: theme.spacing.xs,
+  },
+  centered: {
+    flex: 1,
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eyebrow: {
+    ...theme.typography.label,
+    color: theme.colors.accent,
+    marginBottom: theme.spacing.sm,
+  },
+  title: {
+    ...theme.typography.h1,
+    color: theme.colors.primary,
+    marginBottom: theme.spacing.sm,
+    textAlign: 'center',
+  },
+  subtitle: {
+    ...theme.typography.bodyLarge,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: theme.spacing.lg,
+  },
+  placeholderCard: {
+    padding: theme.spacing.xl,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.colors.accent,
+    borderStyle: 'dashed',
+  },
+  placeholderTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.primary,
+    marginBottom: theme.spacing.sm,
+  },
+  placeholderText: {
+    ...theme.typography.body,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+  },
+  sessionText: {
+    ...theme.typography.bodySmall,
+    color: theme.colors.secondary,
+    marginTop: theme.spacing.lg,
+  },
+});
+
+# ==================================================
+ARSurfaceScene.tsx
+
+import React, { useEffect } from 'react';
+import {
+  ViroARScene,
+  ViroText,
+} from '@reactvision/react-viro';
+
+interface ARSurfaceSceneProps {
+  onObjectTapped: () => void;
+}
+
+export const ARSurfaceScene: React.FC<ARSurfaceSceneProps> = ({ onObjectTapped }) => {
+  useEffect(() => {
+    console.log('ARSurfaceScene Mounted');
+  }, []);
+
+  return (
+    <ViroARScene>
+      <ViroText
+        text="AR TEST"
+        position={[0, 0, -1]}
+        scale={[2, 2, 2]}
+      />
+    </ViroARScene>
+  );
+};
+
+# ==================================================
+ARAssessmentScreen.tsx
+
+import React, { useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Card } from '../../components/Card';
+import { Button } from '../../components/Button';
+import { completeARScenario, getARSession, recordARAssessmentResult } from './arService';
+import { TraineeStackParamList } from '../../navigation/types';
+import { theme } from '../../theme/theme';
+
+type Props = NativeStackScreenProps<TraineeStackParamList, 'ARAssessment'>;
+
+export const ARAssessmentScreen = ({ navigation, route }: Props) => {
+  const [result, setResult] = useState<Awaited<ReturnType<typeof completeARScenario>> | null>(null);
+  const session = getARSession(route.params.sessionId);
+
+  const handleComplete = async () => {
+    if (!session) {
+      return;
+    }
+
+    const assessmentResult = await completeARScenario(session);
+    recordARAssessmentResult(session, assessmentResult);
+    setResult(assessmentResult);
+  };
+
+  if (!session) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.title}>Assessment session unavailable</Text>
+        <Button title="Back to Training" onPress={() => navigation.popToTop()} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.eyebrow}>AR ASSESSMENT</Text>
+      <Text style={styles.title}>{session.scenario.name}</Text>
+      <Text style={styles.subtitle}>Simulated assessment boundary for future AR interactions.</Text>
+
+      {!result ? (
+        <>
+          <Card style={styles.placeholderCard}>
+            <Text style={styles.placeholderTitle}>Assessment Placeholder</Text>
+            <Text style={styles.placeholderText}>
+              Future AR gesture selections, reaction timing, and mistake tracking will be collected here.
+            </Text>
+          </Card>
+          <Button title="Complete Mock AR Assessment" onPress={handleComplete} />
+        </>
+      ) : (
+        <Card style={styles.resultCard}>
+          <Text style={styles.resultLabel}>SIMULATED RESULT</Text>
+          <Text style={styles.score}>{result.score}%</Text>
+          <Text style={styles.status}>{result.passed ? 'Assessment Passed' : 'Assessment Needs Review'}</Text>
+          <Text style={styles.resultText}>Reaction time: {result.reactionTime}s</Text>
+          <Text style={styles.resultText}>Completion time: {result.completionTime}s</Text>
+          <Text style={styles.resultText}>Mistakes: {result.mistakes}</Text>
+          <Button title="Return to Dashboard" onPress={() => navigation.popToTop()} />
+        </Card>
+      )}
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.background,
+    justifyContent: 'center',
+  },
+  centered: {
+    flex: 1,
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eyebrow: {
+    ...theme.typography.label,
+    color: theme.colors.accent,
+    marginBottom: theme.spacing.sm,
+  },
+  title: {
+    ...theme.typography.h1,
+    color: theme.colors.primary,
+    marginBottom: theme.spacing.sm,
+    textAlign: 'center',
+  },
+  subtitle: {
+    ...theme.typography.bodyLarge,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: theme.spacing.lg,
+  },
+  placeholderCard: {
+    padding: theme.spacing.xl,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: theme.colors.secondary,
+    borderStyle: 'dashed',
+  },
+  placeholderTitle: {
+    ...theme.typography.h3,
+    color: theme.colors.primary,
+    marginBottom: theme.spacing.sm,
+  },
+  placeholderText: {
+    ...theme.typography.body,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+  },
+  resultCard: {
+    padding: theme.spacing.xl,
+    alignItems: 'center',
+  },
+  resultLabel: {
+    ...theme.typography.label,
+    color: theme.colors.accent,
+  },
+  score: {
+    fontSize: 52,
+    fontWeight: '800',
+    color: theme.colors.success,
+    marginTop: theme.spacing.sm,
+  },
+  status: {
+    ...theme.typography.h3,
+    color: theme.colors.primary,
+    marginBottom: theme.spacing.lg,
+  },
+  resultText: {
+    ...theme.typography.body,
+    color: theme.colors.text.secondary,
+    marginTop: theme.spacing.xs,
+  },
+});
+
+# ==================================================
+app.json
+
+{
+  "expo": {
+    "name": "MineSafeAI",
+    "slug": "MineSafeAI",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Allow $(PRODUCT_NAME) to access your photos",
+        "NSPhotoLibraryAddUsageDescription": "Allow $(PRODUCT_NAME) to save photos",
+        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to use your camera",
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to use your microphone"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.thesuryas.MineSafeAI"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-splash-screen",
+      "@reactvision/react-viro"
+    ]
+  }
+}
+
+# ==================================================
+package.json
+
+{
+  "name": "minesafeai",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/bottom-tabs": "^7.19.2",
+    "@react-navigation/native": "^7.4.1",
+    "@react-navigation/native-stack": "^7.19.2",
+    "@reactvision/react-viro": "^2.58.1",
+    "expo": "~57.0.23",
+    "expo-camera": "~57.0.5",
+    "expo-font": "~57.0.4",
+    "expo-splash-screen": "~57.0.9",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-web": "^0.21.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "private": true
+}
